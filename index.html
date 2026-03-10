@@ -516,7 +516,7 @@ function logout() {
 
 const navDefs = {
   restaurant: [{ id: 'dashboard', label: 'Home', icon: '⊞' }, { id: 'catalog', label: 'Order', icon: '＋' }, { id: 'history', label: 'History', icon: '↺' }],
-  commissary: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }, { id: 'restaurants', label: 'Clients', icon: '⌂' }, { id: 'users', label: 'Users', icon: '👤' }, { id: 'reports', label: 'Reports', icon: '📄' }],
+  commissary: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }, { id: 'restaurants', label: 'Clients', icon: '⌂' }, { id: 'reports', label: 'Reports', icon: '📄' }, { id: 'users', label: 'Users', icon: '👤' }],
   commissary_staff: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }],
 };
 
@@ -944,11 +944,11 @@ function renderRestaurantItems() {
   const tb = document.getElementById('restaurant-table-body'), mc = document.getElementById('restaurant-mobile-cards');
   const rows = DB.restaurants.map(r => {
     const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
-    return `<tr><td><strong>${r.name}</strong></td><td class="text-muted text-mono text-small">${r.email}</td><td><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></td><td class="text-muted text-small">${orders.length} total, ${pending} pending</td><td><button class="btn btn-ghost btn-sm" onclick="resetPassword('${r.id}')">Reset PW</button></td></tr>`;
+    return `<tr><td><strong>${r.name}</strong></td><td class="text-muted text-mono text-small">${r.email}</td><td><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></td><td class="text-muted text-small">${orders.length} total, ${pending} pending</td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="resetPassword('${r.id}')">Reset PW</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Del</button></td></tr>`;
   }).join('');
   const cards = DB.restaurants.map(r => {
     const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
-    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div></div><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></div><div style="font-size:12px;color:var(--muted);">${orders.length} orders · ${pending} pending</div><div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="resetPassword('${r.id}')">Reset Password</button></div></div>`;
+    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div></div><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></div><div style="font-size:12px;color:var(--muted);">${orders.length} orders · ${pending} pending</div><div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="resetPassword('${r.id}')">Reset Password</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Delete</button></div></div>`;
   }).join('');
   if (tb) tb.innerHTML = rows;
   if (mc) mc.innerHTML = cards;
@@ -992,6 +992,19 @@ async function resetPassword(id) {
     await sb.from('restaurants').update({ password_hash: hashed }).eq('id', id);
     showPasswordResetModal(r.name, newPass);
   } catch (e) { alert('Error resetting password.'); }
+  hideLoading();
+}
+
+async function deleteRestaurant(id) {
+  const r = DB.restaurants.find(r => r.id === id); if (!r) return;
+  const orderCount = DB.orders.filter(o => o.restaurantId === id).length;
+  const warn = orderCount > 0 ? `\n\nThis will also delete ${orderCount} order${orderCount !== 1 ? 's' : ''} associated with this account.` : '';
+  if (!confirm(`Delete "${r.name}"? This cannot be undone.${warn}`)) return;
+  showLoading();
+  try {
+    await sb.from('restaurants').delete().eq('id', id);
+    await loadData(); renderRestaurants();
+  } catch (e) { alert('Error deleting restaurant.'); }
   hideLoading();
 }
 
