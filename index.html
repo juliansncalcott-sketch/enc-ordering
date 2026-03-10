@@ -393,7 +393,7 @@ function showPasswordResetModal(name, pass) {
 async function loadData() {
   const [restRes, menuRes, ordersRes, itemsRes] = await Promise.all([
     sb.from('restaurants').select('*').order('name'),
-    sb.from('menu_items').select('*').order('category').order('name'),
+    sb.from('menu_items').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
     sb.from('orders').select('*').order('placed_at', { ascending: false }),
     sb.from('order_items').select('*'),
   ]);
