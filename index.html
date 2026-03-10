@@ -516,7 +516,7 @@ function logout() {
 
 const navDefs = {
   restaurant: [{ id: 'dashboard', label: 'Home', icon: '⊞' }, { id: 'catalog', label: 'Order', icon: '＋' }, { id: 'history', label: 'History', icon: '↺' }],
-  commissary: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }, { id: 'restaurants', label: 'Clients', icon: '⌂' }, { id: 'users', label: 'Users', icon: '👤' }],
+  commissary: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }, { id: 'restaurants', label: 'Clients', icon: '⌂' }, { id: 'users', label: 'Users', icon: '👤' }, { id: 'reports', label: 'Reports', icon: '📄' }],
   commissary_staff: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }],
 };
 
@@ -541,14 +541,14 @@ function navigate(page) {
     orders: ['Incoming Orders', 'Manage & fulfill orders'],
     menu: ['Menu & Catalog', 'Manage items & availability'],
     restaurants: ['Restaurants', 'Manage client accounts'],
-    users: ['User Management', 'Commissary login accounts']
+    reports: ['Weekly Reports', 'Invoices by restaurant']
   };
   const [title, sub] = titles[page] || [page, ''];
   document.getElementById('topbar-title').textContent = title;
   document.getElementById('topbar-sub').textContent = sub;
   document.getElementById('topbar-actions').innerHTML = '';
   document.getElementById('page-content').innerHTML = '';
-  if ((page === 'restaurants' || page === 'users') && !isAdmin()) { navigate('orders'); return; }
+  if ((page === 'restaurants' || page === 'users' || page === 'reports') && !isAdmin()) { navigate('orders'); return; }
   document.getElementById('cart-toggle-btn').style.display = 'none';
   document.getElementById('cart-panel').classList.remove('open');
   cartOpen = false;
@@ -559,6 +559,7 @@ function navigate(page) {
   else if (page === 'menu') renderMenu();
   else if (page === 'restaurants') renderRestaurants();
   else if (page === 'users') renderUsers();
+  else if (page === 'reports') renderReports();
 }
 
 // ── RESTAURANT — DASHBOARD ────────────────────────────────────────────
@@ -1088,7 +1089,300 @@ async function deleteUser(userId) {
   hideLoading();
 }
 
-// ── EMAIL NOTIFICATION ────────────────────────────────────────────────
+// ── REPORTS & INVOICES ────────────────────────────────────────────────
+
+let reportRestaurantId = null;
+let reportWeekStart = null;
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function weekStartStr(d) { return d.toISOString().split('T')[0]; }
+
+function renderReports() {
+  // Build week options — last 12 weeks
+  const weeks = [];
+  let ws = getWeekStart(new Date());
+  for (let i = 0; i < 12; i++) {
+    const we = new Date(ws); we.setDate(we.getDate() + 6);
+    weeks.push({ start: new Date(ws), end: we });
+    ws.setDate(ws.getDate() - 7);
+  }
+
+  // Default selections
+  if (!reportRestaurantId && DB.restaurants.length) reportRestaurantId = DB.restaurants[0].id;
+  if (!reportWeekStart) reportWeekStart = weekStartStr(weeks[0].start);
+
+  const restOptions = DB.restaurants.map(r =>
+    `<option value="${r.id}" ${r.id === reportRestaurantId ? 'selected' : ''}>${r.name}</option>`).join('');
+  const weekOptions = weeks.map(w =>
+    `<option value="${weekStartStr(w.start)}" ${weekStartStr(w.start) === reportWeekStart ? 'selected' : ''}>Week of ${formatDate(weekStartStr(w.start))} — ${formatDate(weekStartStr(w.end))}</option>`).join('');
+
+  document.getElementById('page-content').innerHTML = `
+    <div class="card mb-24">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+          <label class="form-label">Restaurant</label>
+          <select id="report-restaurant" class="form-input" onchange="reportRestaurantId=this.value;renderReportPreview()">${restOptions}</select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+          <label class="form-label">Week</label>
+          <select id="report-week" class="form-input" onchange="reportWeekStart=this.value;renderReportPreview()">${weekOptions}</select>
+        </div>
+      </div>
+    </div>
+    <div id="report-preview"></div>`;
+
+  renderReportPreview();
+}
+
+function getReportData(restaurantId, weekStartISO) {
+  const ws = new Date(weekStartISO + 'T00:00:00');
+  const we = new Date(ws); we.setDate(we.getDate() + 6); we.setHours(23, 59, 59, 999);
+  const restaurant = DB.restaurants.find(r => r.id === restaurantId);
+  const orders = DB.orders.filter(o => {
+    if (o.restaurantId !== restaurantId) return false;
+    const d = new Date(o.deliveryDate + 'T00:00:00');
+    return d >= ws && d <= we;
+  }).sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+  return { restaurant, orders, weekStart: ws, weekEnd: we };
+}
+
+function renderReportPreview() {
+  if (!reportRestaurantId || !reportWeekStart) return;
+  const { restaurant, orders, weekStart, weekEnd } = getReportData(reportRestaurantId, reportWeekStart);
+  const container = document.getElementById('report-preview');
+  if (!restaurant) { container.innerHTML = ''; return; }
+
+  const grandTotal = orders.reduce((s, o) => s + orderTotal(o), 0);
+  const invoiceNum = 'INV-' + weekStartStr(weekStart).replace(/-/g,'') + '-' + restaurant.name.replace(/[^A-Z0-9]/gi,'').substring(0,4).toUpperCase();
+
+  let orderRows = '';
+  if (orders.length === 0) {
+    orderRows = `<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">No orders this week</td></tr>`;
+  } else {
+    orders.forEach(o => {
+      const isFirst = orders.indexOf(o) === 0;
+      if (!isFirst) orderRows += `<tr><td colspan="5" style="padding:0;border:none;height:8px;"></td></tr>`;
+      orderRows += `<tr style="background:#f9f6f0;">
+        <td colspan="4" style="padding:8px 12px;font-weight:600;font-size:12px;letter-spacing:1px;color:#8C8C86;border-bottom:1px solid #DDD8CE;">
+          DELIVERY ${o.deliveryDate} · ${o.status === 'fulfilled' ? '✓ Fulfilled' : '⏳ Pending'}
+        </td>
+        <td style="padding:8px 12px;background:#f9f6f0;border-bottom:1px solid #DDD8CE;"></td>
+      </tr>`;
+      o.items.forEach(li => {
+        const it = getItem(li.itemId);
+        if (!it) return;
+        orderRows += `<tr>
+          <td style="padding:8px 12px;">${it.name}</td>
+          <td style="padding:8px 12px;color:#8C8C86;">${it.category}</td>
+          <td style="padding:8px 12px;text-align:center;">${li.qty} ${it.unit}</td>
+          <td style="padding:8px 12px;text-align:right;font-family:monospace;">${fmt(it.price)}</td>
+          <td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:600;">${fmt(it.price * li.qty)}</td>
+        </tr>`;
+      });
+      orderRows += `<tr style="background:#FDF3DC;">
+        <td colspan="4" style="padding:6px 12px;text-align:right;font-size:12px;color:#8C8C86;letter-spacing:0.5px;">ORDER SUBTOTAL</td>
+        <td style="padding:6px 12px;text-align:right;font-family:monospace;font-weight:700;color:#C8860A;">${fmt(orderTotal(o))}</td>
+      </tr>`;
+    });
+  }
+
+  const invoiceHTML = buildInvoiceHTML({ restaurant, orders, weekStart, weekEnd, grandTotal, invoiceNum, orderRows });
+
+  container.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn btn-amber" onclick="downloadInvoice()">⬇ Download PDF</button>
+      <button class="btn btn-outline" onclick="emailInvoice()">📧 Email Invoice</button>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:2px;overflow:hidden;">
+      <iframe id="invoice-frame" style="width:100%;height:680px;border:none;background:white;"></iframe>
+    </div>`;
+
+  // Write invoice into iframe for preview
+  const frame = document.getElementById('invoice-frame');
+  frame.contentDocument.open();
+  frame.contentDocument.write(invoiceHTML);
+  frame.contentDocument.close();
+}
+
+function buildInvoiceHTML({ restaurant, orders, weekStart, weekEnd, grandTotal, invoiceNum, orderRows }) {
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const weekRange = formatDate(weekStartStr(weekStart)) + ' — ' + formatDate(weekStartStr(weekEnd));
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice ${invoiceNum}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #1C1C1A; background: white; padding: 40px; max-width: 800px; margin: 0 auto; }
+  @media print {
+    body { padding: 20px; }
+    .no-print { display: none !important; }
+  }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #1C1C1A; }
+  .brand { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+  .brand-sub { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #8C8C86; margin-top: 2px; }
+  .invoice-meta { text-align: right; }
+  .invoice-num { font-size: 18px; font-weight: 700; color: #C8860A; font-family: monospace; }
+  .invoice-date { font-size: 11px; color: #8C8C86; margin-top: 4px; }
+  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+  .party-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #8C8C86; margin-bottom: 6px; }
+  .party-name { font-size: 15px; font-weight: 600; }
+  .party-detail { font-size: 12px; color: #4A4A46; margin-top: 2px; }
+  .week-banner { background: #FDF3DC; border-left: 3px solid #C8860A; padding: 10px 14px; margin-bottom: 24px; font-size: 12px; color: #7a5100; }
+  .week-banner strong { font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  thead th { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #8C8C86; text-align: left; padding: 8px 12px; border-bottom: 2px solid #DDD8CE; }
+  thead th:nth-child(3), thead th:nth-child(4), thead th:nth-child(5) { text-align: right; }
+  tbody td { border-bottom: 1px solid #f0ece4; vertical-align: middle; font-size: 13px; }
+  .totals { display: flex; justify-content: flex-end; }
+  .totals-box { width: 260px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #DDD8CE; font-size: 13px; }
+  .totals-row.grand { border-bottom: none; padding-top: 10px; font-size: 16px; font-weight: 700; }
+  .totals-row.grand span:last-child { color: #C8860A; font-family: monospace; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #DDD8CE; font-size: 11px; color: #8C8C86; text-align: center; }
+  .status-paid { display: inline-block; border: 2px solid #2D6A4F; color: #2D6A4F; padding: 4px 16px; border-radius: 2px; font-weight: 700; font-size: 12px; letter-spacing: 2px; transform: rotate(-2deg); margin-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">Commissary</div>
+      <div class="brand-sub">ENC Ordering System</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="invoice-num">${invoiceNum}</div>
+      <div class="invoice-date">Issued ${today}</div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div>
+      <div class="party-label">From</div>
+      <div class="party-name">ENC Commissary</div>
+      <div class="party-detail">commissary@enc.com</div>
+    </div>
+    <div>
+      <div class="party-label">Bill To</div>
+      <div class="party-name">${restaurant.name}</div>
+      <div class="party-detail">${restaurant.email}</div>
+    </div>
+  </div>
+
+  <div class="week-banner">
+    <strong>Week of ${weekRange}</strong><br>
+    ${orders.length} order${orders.length !== 1 ? 's' : ''} · ${orders.filter(o => o.status === 'fulfilled').length} fulfilled
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Category</th>
+        <th style="text-align:center;">Qty</th>
+        <th style="text-align:right;">Unit Price</th>
+        <th style="text-align:right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${orderRows}</tbody>
+  </table>
+
+  <div class="totals">
+    <div class="totals-box">
+      <div class="totals-row grand"><span>Total Due</span><span>${fmt(grandTotal)}</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Thank you for your business · ENC Commissary · Questions? Contact your commissary admin.
+  </div>
+</body>
+</html>`;
+}
+
+function downloadInvoice() {
+  const { restaurant, orders, weekStart, weekEnd, grandTotal } = getReportData(reportRestaurantId, reportWeekStart);
+  const invoiceNum = 'INV-' + weekStartStr(weekStart).replace(/-/g,'') + '-' + restaurant.name.replace(/[^A-Z0-9]/gi,'').substring(0,4).toUpperCase();
+  const orderRows = buildOrderRows(orders);
+  const html = buildInvoiceHTML({ restaurant, orders, weekStart, weekEnd, grandTotal, invoiceNum, orderRows });
+
+  // Open in new window and trigger print-to-PDF
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
+
+function buildOrderRows(orders) {
+  let rows = '';
+  if (orders.length === 0) {
+    return `<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">No orders this week</td></tr>`;
+  }
+  orders.forEach((o, idx) => {
+    if (idx > 0) rows += `<tr><td colspan="5" style="padding:0;border:none;height:8px;"></td></tr>`;
+    rows += `<tr style="background:#f9f6f0;">
+      <td colspan="4" style="padding:8px 12px;font-weight:600;font-size:12px;letter-spacing:1px;color:#8C8C86;border-bottom:1px solid #DDD8CE;">
+        DELIVERY ${o.deliveryDate} · ${o.status === 'fulfilled' ? '✓ Fulfilled' : '⏳ Pending'}
+      </td>
+      <td style="padding:8px 12px;background:#f9f6f0;border-bottom:1px solid #DDD8CE;"></td>
+    </tr>`;
+    o.items.forEach(li => {
+      const it = getItem(li.itemId);
+      if (!it) return;
+      rows += `<tr>
+        <td style="padding:8px 12px;">${it.name}</td>
+        <td style="padding:8px 12px;color:#8C8C86;">${it.category}</td>
+        <td style="padding:8px 12px;text-align:center;">${li.qty} ${it.unit}</td>
+        <td style="padding:8px 12px;text-align:right;font-family:monospace;">${fmt(it.price)}</td>
+        <td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:600;">${fmt(it.price * li.qty)}</td>
+      </tr>`;
+    });
+    rows += `<tr style="background:#FDF3DC;">
+      <td colspan="4" style="padding:6px 12px;text-align:right;font-size:12px;color:#8C8C86;letter-spacing:0.5px;">ORDER SUBTOTAL</td>
+      <td style="padding:6px 12px;text-align:right;font-family:monospace;font-weight:700;color:#C8860A;">${fmt(orderTotal(o))}</td>
+    </tr>`;
+  });
+  return rows;
+}
+
+function emailInvoice() {
+  const { restaurant, orders, weekStart, weekEnd, grandTotal } = getReportData(reportRestaurantId, reportWeekStart);
+  const invoiceNum = 'INV-' + weekStartStr(weekStart).replace(/-/g,'') + '-' + restaurant.name.replace(/[^A-Z0-9]/gi,'').substring(0,4).toUpperCase();
+  const weekRange = formatDate(weekStartStr(weekStart)) + ' – ' + formatDate(weekStartStr(weekEnd));
+
+  let body = `Hi ${restaurant.name},\n\nPlease find your weekly invoice from ENC Commissary below.\n\n`;
+  body += `Invoice: ${invoiceNum}\nWeek: ${weekRange}\n\n`;
+  body += '='.repeat(50) + '\n\n';
+
+  if (orders.length === 0) {
+    body += 'No orders this week.\n';
+  } else {
+    orders.forEach(o => {
+      body += `Delivery ${o.deliveryDate} (${o.status})\n` + '-'.repeat(30) + '\n';
+      o.items.forEach(li => {
+        const it = getItem(li.itemId);
+        body += `  ${it ? it.name : '?'} — ${li.qty} ${it ? it.unit : ''}  ${it ? fmt(it.price * li.qty) : ''}\n`;
+      });
+      body += `  Subtotal: ${fmt(orderTotal(o))}\n\n`;
+    });
+    body += '='.repeat(50) + '\n';
+    body += `TOTAL DUE: ${fmt(grandTotal)}\n`;
+  }
+
+  body += '\nThank you for your business!\nENC Commissary';
+
+  const subject = `Invoice ${invoiceNum} — Week of ${weekRange}`;
+  window.location.href = `mailto:${encodeURIComponent(restaurant.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 
 function buildOrderEmailBody() {
   const tomorrow = deliveryDate(1);
