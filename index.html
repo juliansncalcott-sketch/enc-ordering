@@ -944,11 +944,11 @@ function renderRestaurantItems() {
   const tb = document.getElementById('restaurant-table-body'), mc = document.getElementById('restaurant-mobile-cards');
   const rows = DB.restaurants.map(r => {
     const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
-    return `<tr><td><strong>${r.name}</strong></td><td class="text-muted text-mono text-small">${r.email}</td><td><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></td><td class="text-muted text-small">${orders.length} total, ${pending} pending</td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="resetPassword('${r.id}')">Reset PW</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Del</button></td></tr>`;
+    return `<tr><td><strong>${r.name}</strong></td><td class="text-muted text-mono text-small">${r.email}</td><td><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></td><td class="text-muted text-small">${orders.length} total, ${pending} pending</td><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openEditRestaurantModal('${r.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="resetPassword('${r.id}')">Reset PW</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Del</button></td></tr>`;
   }).join('');
   const cards = DB.restaurants.map(r => {
     const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
-    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div></div><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></div><div style="font-size:12px;color:var(--muted);">${orders.length} orders · ${pending} pending</div><div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="resetPassword('${r.id}')">Reset Password</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Delete</button></div></div>`;
+    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div></div><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></div><div style="font-size:12px;color:var(--muted);">${orders.length} orders · ${pending} pending</div><div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="openEditRestaurantModal('${r.id}')">Edit Details</button><button class="btn btn-outline btn-sm" onclick="resetPassword('${r.id}')">Reset Password</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteRestaurant('${r.id}')">Delete</button></div></div>`;
   }).join('');
   if (tb) tb.innerHTML = rows;
   if (mc) mc.innerHTML = cards;
@@ -992,6 +992,36 @@ async function resetPassword(id) {
     await sb.from('restaurants').update({ password_hash: hashed }).eq('id', id);
     showPasswordResetModal(r.name, newPass);
   } catch (e) { alert('Error resetting password.'); }
+  hideLoading();
+}
+
+function openEditRestaurantModal(id) {
+  const r = DB.restaurants.find(r => r.id === id); if (!r) return;
+  showModal(`<div class="modal-title">Edit Restaurant</div>
+    <div class="form-group"><label class="form-label">Restaurant Name</label><input id="re-name" class="form-input" value="${r.name}"></div>
+    <div class="form-group"><label class="form-label">Email</label><input id="re-email" class="form-input" type="email" value="${r.email}"></div>
+    <div class="form-group"><label class="form-label">Status</label>
+      <select id="re-active" class="form-input">
+        <option value="true" ${r.active ? 'selected' : ''}>Active — can log in and place orders</option>
+        <option value="false" ${!r.active ? 'selected' : ''}>Inactive — login disabled</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-amber" onclick="saveEditRestaurant('${id}')">Save Changes</button>
+    </div>`);
+}
+
+async function saveEditRestaurant(id) {
+  const name = document.getElementById('re-name').value.trim();
+  const email = document.getElementById('re-email').value.trim();
+  const active = document.getElementById('re-active').value === 'true';
+  if (!name || !email) { alert('Name and email are required.'); return; }
+  showLoading();
+  try {
+    await sb.from('restaurants').update({ name, email, active }).eq('id', id);
+    await loadData(); closeModal(); renderRestaurants();
+  } catch (e) { alert('Error saving changes. Email may already be in use.'); }
   hideLoading();
 }
 
