@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Commissary — ENC Ordering System</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --cream: #F5F0E8;
+    --warm-white: #FAF7F2;
+    --charcoal: #1C1C1A;
+    --mid: #4A4A46;
+    --muted: #8C8C86;
+    --amber: #C8860A;
+    --amber-light: #F0A830;
+    --amber-pale: #FDF3DC;
+    --green: #2D6A4F;
+    --green-light: #D8F3DC;
+    --red: #9B2335;
+    --red-light: #FDECEA;
+    --border: #DDD8CE;
+    --shadow: 0 2px 12px rgba(28,28,26,0.08);
+    --shadow-lg: 0 8px 32px rgba(28,28,26,0.12);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'IBM Plex Sans', sans-serif; background: var(--cream); color: var(--charcoal); min-height: 100vh; font-size: 14px; overflow-x: hidden; }
+
+  /* LOGIN */
+  #login-screen { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; background: var(--charcoal); position: relative; overflow: hidden; padding: 16px; }
+  #login-screen::before { content: ''; position: absolute; top: -20%; right: -10%; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(200,134,10,0.15) 0%, transparent 70%); }
+  .login-box { background: var(--warm-white); border-radius: 4px; padding: 36px 28px; width: 100%; max-width: 400px; box-shadow: var(--shadow-lg); position: relative; z-index: 1; }
+  .login-logo { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--charcoal); margin-bottom: 4px; }
+  .login-tagline { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 28px; }
+  .login-tabs { display: flex; border: 1px solid var(--border); border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
+  .login-tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); background: transparent; border: none; font-family: 'IBM Plex Mono', monospace; touch-action: manipulation; }
+  .login-tab.active { background: var(--charcoal); color: var(--amber-light); }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .form-input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 2px; font-family: 'IBM Plex Sans', sans-serif; font-size: 16px; color: var(--charcoal); background: var(--warm-white); outline: none; transition: border-color 0.2s; appearance: none; }
+  .form-input:focus { border-color: var(--amber); }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; border: none; border-radius: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; transition: all 0.2s; text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+  .btn-primary { background: var(--charcoal); color: var(--amber-light); width: 100%; padding: 14px; font-size: 13px; }
+  .btn-primary:active { background: #2e2e2a; }
+  .btn-amber { background: var(--amber); color: white; }
+  .btn-amber:active { background: #b07608; }
+  .btn-outline { background: transparent; color: var(--charcoal); border: 1px solid var(--border); }
+  .btn-outline:active { border-color: var(--charcoal); }
+  .btn-ghost { background: transparent; color: var(--muted); padding: 8px 12px; }
+  .btn-ghost:active { color: var(--charcoal); }
+  .btn-green { background: var(--green); color: white; }
+  .btn-green:active { background: #235a41; }
+  .btn-sm { padding: 8px 14px; font-size: 11px; }
+  .error-msg { color: var(--red); font-size: 12px; margin-top: 12px; text-align: center; font-family: 'IBM Plex Mono', monospace; }
+
+  /* DESKTOP LAYOUT */
+  #app { display: none; min-height: 100vh; }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: var(--charcoal); display: flex; flex-direction: column; z-index: 100; }
+  .sidebar-logo { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .sidebar-logo-text { font-family: 'Playfair Display', serif; font-size: 20px; color: white; font-weight: 600; }
+  .sidebar-role { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--amber-light); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px; }
+  .sidebar-name { font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .sidebar-nav { padding: 16px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 24px; color: rgba(255,255,255,0.55); cursor: pointer; transition: all 0.15s; font-size: 13px; border-left: 3px solid transparent; touch-action: manipulation; }
+  .nav-item:active { background: rgba(255,255,255,0.05); }
+  .nav-item.active { color: var(--amber-light); border-left-color: var(--amber-light); background: rgba(200,134,10,0.08); }
+  .nav-icon { font-size: 17px; }
+  .sidebar-footer { padding: 20px 24px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .logout-btn { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.35); background: none; border: none; cursor: pointer; letter-spacing: 0.5px; text-transform: uppercase; padding: 0; }
+  .logout-btn:hover { color: rgba(255,255,255,0.7); }
+  .main { margin-left: 220px; min-height: 100vh; background: var(--cream); }
+  .topbar { background: var(--warm-white); border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  .page-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; }
+  .page-subtitle { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 2px; letter-spacing: 0.5px; }
+  .content { padding: 28px 32px 48px; }
+
+  /* MOBILE BOTTOM NAV */
+  .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--charcoal); border-top: 1px solid rgba(255,255,255,0.1); z-index: 100; padding-bottom: var(--safe-bottom); }
+  .bottom-nav-inner { display: flex; align-items: stretch; }
+  .bottom-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 4px 8px; gap: 3px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.3px; text-transform: uppercase; border: none; background: none; touch-action: manipulation; transition: color 0.15s; }
+  .bottom-nav-item.active { color: var(--amber-light); }
+  .bottom-nav-item:active { background: rgba(255,255,255,0.05); }
+  .bottom-nav-icon { font-size: 22px; line-height: 1; }
+
+  /* CARDS */
+  .card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 2px; padding: 20px; box-shadow: var(--shadow); }
+  .card-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 2px; padding: 16px; }
+  .stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .stat-value { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 600; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* TABLES */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-weight: 500; white-space: nowrap; }
+  td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+
+  /* MOBILE ROW CARDS */
+  .row-card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 2px; padding: 16px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .row-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 10px; }
+  .row-card-title { font-weight: 600; font-size: 15px; }
+  .row-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
+  .badge-pending { background: var(--amber-pale); color: var(--amber); }
+  .badge-fulfilled { background: var(--green-light); color: var(--green); }
+
+  /* CATALOG */
+  .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .catalog-item { background: var(--warm-white); border: 1px solid var(--border); border-radius: 2px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .catalog-item-name { font-weight: 600; font-size: 15px; }
+  .catalog-item-cat { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--amber); }
+  .catalog-item-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .catalog-item-price { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  .qty-control { display: flex; align-items: center; gap: 10px; }
+  .qty-btn { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 2px; background: var(--cream); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; touch-action: manipulation; user-select: none; }
+  .qty-btn:active { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+  .qty-display { font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500; min-width: 28px; text-align: center; }
+  .unavailable-overlay { opacity: 0.4; pointer-events: none; }
+
+  /* CART */
+  .cart-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 320px; background: var(--warm-white); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 150; transform: translateX(100%); transition: transform 0.3s ease; box-shadow: var(--shadow-lg); }
+  .cart-panel.open { transform: translateX(0); }
+  .cart-header { padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .cart-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 600; }
+  .cart-delivery { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--amber); margin-top: 4px; }
+  .cart-body { flex: 1; overflow-y: auto; padding: 14px 20px; -webkit-overflow-scrolling: touch; }
+  .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 8px; }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-item-name { font-weight: 500; flex: 1; }
+  .cart-item-qty { font-family: 'IBM Plex Mono', monospace; color: var(--muted); font-size: 12px; }
+  .cart-item-price { font-family: 'IBM Plex Mono', monospace; font-size: 13px; white-space: nowrap; }
+  .cart-footer { padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .cart-total { display: flex; justify-content: space-between; font-weight: 600; font-size: 15px; margin-bottom: 14px; font-family: 'IBM Plex Mono', monospace; }
+  .cart-toggle { position: fixed; right: 24px; bottom: 24px; background: var(--charcoal); color: var(--amber-light); border: none; border-radius: 2px; padding: 14px 18px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-lg); z-index: 49; touch-action: manipulation; }
+  .cart-count { background: var(--amber); color: white; border-radius: 2px; padding: 2px 6px; font-size: 11px; }
+
+  /* MODALS */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(28,28,26,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.2s; padding: 16px; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--warm-white); border-radius: 2px; padding: 28px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: var(--shadow-lg); transform: translateY(8px); transition: transform 0.2s; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; margin-bottom: 20px; }
+  .modal-footer { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; flex-wrap: wrap; }
+
+  /* NOTICES */
+  .notice { padding: 12px 14px; border-radius: 2px; font-size: 13px; margin-bottom: 18px; display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
+  .notice-amber { background: var(--amber-pale); border-left: 3px solid var(--amber); color: #7a5100; }
+  .notice-green { background: var(--green-light); border-left: 3px solid var(--green); color: var(--green); }
+
+  /* TABS */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 18px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; touch-action: manipulation; }
+  .tab.active { color: var(--charcoal); border-bottom-color: var(--amber); }
+
+  /* MISC */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .text-muted { color: var(--muted); }
+  .text-mono { font-family: 'IBM Plex Mono', monospace; }
+  .text-small { font-size: 12px; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .mb-24 { margin-bottom: 24px; }
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+  .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state-title { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--mid); margin-bottom: 8px; }
+  .empty-state-text { font-size: 13px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .section-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+  select.form-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238C8C86' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  .pill-filter { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; margin-bottom: 16px; scrollbar-width: none; }
+  .pill-filter::-webkit-scrollbar { display: none; }
+  .pill { padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.5px; cursor: pointer; background: transparent; color: var(--muted); text-transform: uppercase; white-space: nowrap; touch-action: manipulation; flex-shrink: 0; }
+  .pill.active { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+  .toggle-switch { position: relative; display: inline-block; width: 40px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
+  .toggle-slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+  .toggle-switch input:checked + .toggle-slider { background: var(--green); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
+  .reorder-btn { background: var(--amber-pale); color: var(--amber); border: 1px solid rgba(200,134,10,0.3); padding: 8px 14px; border-radius: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; touch-action: manipulation; white-space: nowrap; }
+  .reorder-btn:active { background: var(--amber); color: white; }
+
+  /* LOADING OVERLAY */
+  #loading-overlay { position: fixed; inset: 0; background: rgba(28,28,26,0.5); z-index: 999; display: none; align-items: center; justify-content: center; }
+  #loading-overlay.show { display: flex; }
+  .spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.2); border-top-color: var(--amber-light); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .page { animation: fadeIn 0.2s ease; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .bottom-nav { display: block; }
+    .main { margin-left: 0; }
+    .topbar { padding: 14px 16px; }
+    .page-title { font-size: 17px; }
+    .page-subtitle { font-size: 10px; }
+    .content { padding: 16px 16px calc(80px + var(--safe-bottom)); }
+    .login-box { padding: 28px 20px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat-grid .stat-card:last-child { grid-column: 1 / -1; }
+    .stat-value { font-size: 24px; }
+    .catalog-grid { grid-template-columns: 1fr; }
+    .cart-panel { top: auto; left: 0; right: 0; bottom: calc(62px + var(--safe-bottom)); width: 100%; border-left: none; border-top: 2px solid var(--border); transform: translateY(100%); border-radius: 14px 14px 0 0; max-height: 80vh; }
+    .cart-panel.open { transform: translateY(0); }
+    .cart-toggle { right: 16px; bottom: calc(74px + var(--safe-bottom)); }
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal { border-radius: 14px 14px 0 0; max-width: 100%; padding: 24px 18px calc(24px + var(--safe-bottom)); }
+    .desktop-table { display: none !important; }
+    .mobile-cards { display: block !important; }
+    #topbar-actions .btn { padding: 8px 12px; font-size: 11px; }
+  }
+  @media (min-width: 769px) {
+    .mobile-cards { display: none; }
+    .desktop-table { display: block; }
+  }
+  @media (max-width: 380px) {
+    .stat-grid { grid-template-columns: 1fr; }
+    .stat-grid .stat-card:last-child { grid-column: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay"><div class="spinner"></div></div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Commissary</div>
+    <div class="login-tagline">ENC Ordering System</div>
+    <div class="login-tabs">
+      <button class="login-tab active" onclick="setLoginRole('restaurant')">Restaurant</button>
+      <button class="login-tab" onclick="setLoginRole('commissary')">Commissary</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" id="login-email" class="form-input" placeholder="your@email.com" autocomplete="email" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Sign In →</button>
+    <div id="login-error" class="error-msg"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">Commissary</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">ENC Ordering System</div>
+      <div class="sidebar-role" id="sidebar-role">—</div>
+      <div class="sidebar-name" id="sidebar-name">—</div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <button class="logout-btn" onclick="logout()">↩ Sign Out</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="topbar-title">Dashboard</div>
+        <div class="page-subtitle" id="topbar-sub"></div>
+      </div>
+      <div id="topbar-actions"></div>
+    </div>
+    <div class="content" id="page-content"></div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="bottom-nav-inner" id="bottom-nav-inner"></div>
+  </div>
+</div>
+
+<!-- Cart -->
+<div class="cart-panel" id="cart-panel">
+  <div class="cart-header">
+    <div class="flex items-center justify-between">
+      <div class="cart-title">Your Order</div>
+      <button class="btn btn-ghost btn-sm" onclick="toggleCart()" style="font-size:18px;padding:4px 10px;">✕</button>
+    </div>
+    <div class="cart-delivery" id="cart-delivery-date"></div>
+  </div>
+  <div class="cart-body" id="cart-body"></div>
+  <div class="cart-footer">
+    <div class="cart-total"><span>Total</span><span id="cart-total-val">$0.00</span></div>
+    <button class="btn btn-primary" onclick="submitOrder()" style="margin-bottom:8px;">Place Order →</button>
+    <button class="btn btn-ghost" style="width:100%;" onclick="clearCart()">Clear</button>
+  </div>
+</div>
+
+<button class="cart-toggle" id="cart-toggle-btn" onclick="toggleCart()" style="display:none;">
+  🛒 <span class="cart-count" id="cart-count">0</span>
+</button>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+// ── CONFIG — fill these in after creating your Supabase project ──────
+const SUPABASE_URL = 'https://vccnxbyhbgzbogijzwqm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjY254YnloYmd6Ym9naWp6d3FtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTQyMDMsImV4cCI6MjA4ODY3MDIwM30.g7wo4J2nU76yEZZBnHIsRJ-zx8RbgNkEJu97SZvxpfk';
+// ─────────────────────────────────────────────────────────────────────
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Local cache — loaded fresh on login and after mutations
+let DB = { restaurants: [], commissaryUsers: [], menuItems: [], orders: [] };
+let currentUser = null, currentRole = null, loginRole = 'restaurant';
+let currentPage = null, cart = {}, cartOpen = false;
+let activeCategory = 'All', activeOrderTab = 'pending';
+let editingOrderId = null;
+let notificationEmail = localStorage.getItem('enc_notify_email') || '';
+
+// ── UTILITIES ─────────────────────────────────────────────────────────
+
+const fmt = n => '$' + Number(n).toFixed(2);
+const getItem = id => DB.menuItems.find(i => i.id === id);
+const getRestaurant = id => DB.restaurants.find(r => r.id === id);
+
+function getCutoff() { const c = new Date(); c.setHours(23, 0, 0, 0); return c; }
+function isCutoffPassed() { return new Date() >= getCutoff(); }
+function deliveryDate(leadDays = 1) {
+  const now = new Date();
+  const daysAhead = leadDays + (now >= getCutoff() ? 1 : 0);
+  const d = new Date(now);
+  d.setDate(d.getDate() + daysAhead);
+  return d.toISOString().split('T')[0];
+}
+function leadLabel(days) { return days === 1 ? 'Next Day' : days === 2 ? '48 hr' : '72 hr'; }
+function formatDate(s) {
+  if (!s) return '—';
+  const [y, m, d] = s.split('-');
+  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${mo[+m-1]} ${+d}, ${y}`;
+}
+function formatTime(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+const orderTotal = o => o.items.reduce((s, li) => {
+  const it = getItem(li.itemId); return s + (it ? it.price * li.qty : 0);
+}, 0);
+const cartTotal = () => Object.entries(cart).reduce((s, [id, qty]) => {
+  const it = getItem(id); return s + (it ? it.price * qty : 0);
+}, 0);
+const cartItemCount = () => Object.values(cart).reduce((a, b) => a + b, 0);
+
+async function hashPassword(password) {
+  const data = new TextEncoder().encode(password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showLoading() { document.getElementById('loading-overlay').classList.add('show'); }
+function hideLoading() { document.getElementById('loading-overlay').classList.remove('show'); }
+
+function showModal(html) { document.getElementById('modal-content').innerHTML = html; document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+document.getElementById('modal-overlay').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+
+function showPasswordResetModal(name, pass) {
+  showModal(`<div class="modal-title">Password Reset</div>
+    <p style="color:var(--mid);margin-bottom:16px;">New password for <strong>${name}</strong>:</p>
+    <div style="background:var(--cream);border:1px solid var(--border);padding:16px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:3px;">${pass}</div>
+    <p style="color:var(--muted);font-size:12px;margin-top:12px;">Share this with them.</p>
+    <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal()">Done</button></div>`);
+}
+
+// ── DATA LOADING ──────────────────────────────────────────────────────
+
+async function loadData() {
+  const [restRes, menuRes, ordersRes, itemsRes] = await Promise.all([
+    sb.from('restaurants').select('*').order('name'),
+    sb.from('menu_items').select('*').order('category').order('name'),
+    sb.from('orders').select('*').order('placed_at', { ascending: false }),
+    sb.from('order_items').select('*'),
+  ]);
+
+  DB.restaurants = (restRes.data || []).map(r => ({
+    id: r.id, name: r.name, email: r.email, active: r.active,
+    password_hash: r.password_hash
+  }));
+
+  DB.menuItems = (menuRes.data || []).map(m => ({
+    id: m.id, name: m.name, category: m.category, unit: m.unit,
+    price: parseFloat(m.price), available: m.available, leadDays: m.lead_days || 1
+  }));
+
+  const allItems = itemsRes.data || [];
+  DB.orders = (ordersRes.data || []).map(o => ({
+    id: o.id,
+    restaurantId: o.restaurant_id,
+    deliveryDate: o.delivery_date,
+    status: o.status,
+    placedAt: o.placed_at,
+    items: allItems.filter(i => i.order_id === o.id).map(i => ({ itemId: i.item_id, qty: i.qty, _rowId: i.id }))
+  }));
+
+  // Load commissary users separately (admin only context)
+  const usersRes = await sb.from('commissary_users').select('id, name, email, role').order('name');
+  DB.commissaryUsers = usersRes.data || [];
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────
+
+function setLoginRole(role) {
+  loginRole = role;
+  document.querySelectorAll('.login-tab').forEach((t, i) =>
+    t.classList.toggle('active', (i === 0 && role === 'restaurant') || (i === 1 && role === 'commissary')));
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  document.getElementById('login-error').textContent = '';
+  if (!email || !pass) { document.getElementById('login-error').textContent = 'Please enter email and password.'; return; }
+
+  showLoading();
+  try {
+    const hashed = await hashPassword(pass);
+
+    if (loginRole === 'commissary') {
+      const { data } = await sb.from('commissary_users').select('*').eq('email', email).eq('password_hash', hashed).single();
+      if (data) { currentUser = data; currentRole = 'commissary'; await enterApp(); return; }
+    } else {
+      const { data } = await sb.from('restaurants').select('*').eq('email', email).eq('password_hash', hashed).single();
+      if (data) {
+        if (!data.active) { document.getElementById('login-error').textContent = 'Account inactive. Contact your commissary.'; hideLoading(); return; }
+        currentUser = { id: data.id, name: data.name, email: data.email, active: data.active };
+        currentRole = 'restaurant';
+        await enterApp();
+        return;
+      }
+    }
+    document.getElementById('login-error').textContent = 'Invalid email or password.';
+  } catch (e) {
+    document.getElementById('login-error').textContent = 'Connection error. Check your internet and try again.';
+    console.error(e);
+  }
+  hideLoading();
+}
+
+const isAdmin = () => currentRole === 'commissary' && currentUser && currentUser.role === 'admin';
+
+async function enterApp() {
+  showLoading();
+  await loadData();
+  hideLoading();
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('sidebar-role').textContent = currentRole === 'commissary' ? (isAdmin() ? 'Admin' : 'Staff') : 'Restaurant';
+  document.getElementById('sidebar-name').textContent = currentUser.name;
+  localStorage.setItem('enc_session', JSON.stringify({ userId: currentUser.id, role: currentRole, loginRole }));
+  buildNav();
+  navigate(currentRole === 'commissary' ? 'orders' : 'dashboard');
+}
+
+function logout() {
+  currentUser = null; currentRole = null; cart = {}; editingOrderId = null;
+  DB = { restaurants: [], commissaryUsers: [], menuItems: [], orders: [] };
+  localStorage.removeItem('enc_session');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('cart-panel').classList.remove('open');
+  document.getElementById('cart-toggle-btn').style.display = 'none';
+  cartOpen = false;
+}
+
+// Auto-login from saved session
+(async function restoreSession() {
+  try {
+    const s = localStorage.getItem('enc_session');
+    if (!s) return;
+    const { userId, role, loginRole: lr } = JSON.parse(s);
+    loginRole = lr || 'restaurant';
+    showLoading();
+
+    if (role === 'commissary') {
+      const { data } = await sb.from('commissary_users').select('*').eq('id', userId).single();
+      if (data) { currentUser = data; currentRole = 'commissary'; await enterApp(); return; }
+    } else {
+      const { data } = await sb.from('restaurants').select('id, name, email, active').eq('id', userId).eq('active', true).single();
+      if (data) { currentUser = data; currentRole = 'restaurant'; await enterApp(); return; }
+    }
+    localStorage.removeItem('enc_session');
+  } catch (e) { localStorage.removeItem('enc_session'); }
+  hideLoading();
+})();
+
+// ── NAV ───────────────────────────────────────────────────────────────
+
+const navDefs = {
+  restaurant: [{ id: 'dashboard', label: 'Home', icon: '⊞' }, { id: 'catalog', label: 'Order', icon: '＋' }, { id: 'history', label: 'History', icon: '↺' }],
+  commissary: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }, { id: 'restaurants', label: 'Clients', icon: '⌂' }, { id: 'users', label: 'Users', icon: '👤' }],
+  commissary_staff: [{ id: 'orders', label: 'Orders', icon: '⊞' }, { id: 'menu', label: 'Menu', icon: '☰' }],
+};
+
+function buildNav() {
+  const navKey = currentRole === 'commissary' ? (isAdmin() ? 'commissary' : 'commissary_staff') : 'restaurant';
+  const items = navDefs[navKey];
+  document.getElementById('sidebar-nav').innerHTML = items.map(n =>
+    `<div class="nav-item" id="nav-${n.id}" onclick="navigate('${n.id}')"><span class="nav-icon">${n.icon}</span>${n.label}</div>`).join('');
+  document.getElementById('bottom-nav-inner').innerHTML = items.map(n =>
+    `<button class="bottom-nav-item" id="bnav-${n.id}" onclick="navigate('${n.id}')"><span class="bottom-nav-icon">${n.icon}</span>${n.label}</button>`).join('') +
+    `<button class="bottom-nav-item" onclick="logout()"><span class="bottom-nav-icon">↩</span>Out</button>`;
+}
+
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(el => el.classList.remove('active'));
+  ['nav-' + page, 'bnav-' + page].forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('active'); });
+  const titles = {
+    dashboard: ['Dashboard', 'Welcome back'],
+    catalog: ['Place an Order', 'Select items for delivery'],
+    history: ['Order History', 'Your past orders'],
+    orders: ['Incoming Orders', 'Manage & fulfill orders'],
+    menu: ['Menu & Catalog', 'Manage items & availability'],
+    restaurants: ['Restaurants', 'Manage client accounts'],
+    users: ['User Management', 'Commissary login accounts']
+  };
+  const [title, sub] = titles[page] || [page, ''];
+  document.getElementById('topbar-title').textContent = title;
+  document.getElementById('topbar-sub').textContent = sub;
+  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('page-content').innerHTML = '';
+  if ((page === 'restaurants' || page === 'users') && !isAdmin()) { navigate('orders'); return; }
+  document.getElementById('cart-toggle-btn').style.display = 'none';
+  document.getElementById('cart-panel').classList.remove('open');
+  cartOpen = false;
+  if (page === 'dashboard') renderDashboard();
+  else if (page === 'catalog') renderCatalog();
+  else if (page === 'history') renderHistory();
+  else if (page === 'orders') renderOrders();
+  else if (page === 'menu') renderMenu();
+  else if (page === 'restaurants') renderRestaurants();
+  else if (page === 'users') renderUsers();
+}
+
+// ── RESTAURANT — DASHBOARD ────────────────────────────────────────────
+
+function renderDashboard() {
+  const myOrders = DB.orders.filter(o => o.restaurantId === currentUser.id);
+  const pending = myOrders.filter(o => o.status === 'pending');
+  const lastOrder = [...myOrders].sort((a, b) => b.placedAt.localeCompare(a.placedAt))[0];
+  document.getElementById('page-content').innerHTML = `
+    ${isCutoffPassed()
+      ? `<div class="notice notice-amber">⏰ Cutoff passed — orders now deliver ${formatDate(deliveryDate())}.</div>`
+      : `<div class="notice notice-green">✓ Order by 11:00 PM for next-day delivery, ${formatDate(deliveryDate())}.</div>`}
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value">${pending.length}</div><div class="stat-sub">awaiting fulfillment</div></div>
+      <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-value">${myOrders.length}</div><div class="stat-sub">all time</div></div>
+      <div class="stat-card"><div class="stat-label">Last Order</div><div class="stat-value" style="font-size:16px;padding-top:6px;">${lastOrder ? formatDate(lastOrder.deliveryDate) : '—'}</div><div class="stat-sub">${lastOrder ? fmt(orderTotal(lastOrder)) + ' · ' + lastOrder.items.length + ' items' : 'No orders yet'}</div></div>
+    </div>
+    ${lastOrder ? `<div class="card mb-24"><div class="section-header"><div class="section-title">Last Order</div><button class="reorder-btn" onclick="reorder('${lastOrder.id}')">↺ Reorder</button></div><ul style="list-style:none;">${lastOrder.items.map(li => { const it = getItem(li.itemId); return `<li style="padding:4px 0;font-size:13px;color:var(--mid);">· ${it ? it.name : '?'} — <span class="text-mono">${li.qty} ${it ? it.unit : ''}</span></li>`; }).join('')}</ul></div>` : ''}
+    <button class="btn btn-amber" onclick="navigate('catalog')" style="width:100%;padding:16px;font-size:14px;">+ Place New Order</button>`;
+}
+
+function reorder(orderId) {
+  const order = DB.orders.find(o => o.id === orderId);
+  if (!order) return;
+  cart = {};
+  order.items.forEach(li => { cart[li.itemId] = li.qty; });
+  navigate('catalog');
+  setTimeout(() => { cartOpen = false; toggleCart(); }, 150);
+}
+
+// ── RESTAURANT — CATALOG ──────────────────────────────────────────────
+
+function renderCatalog() {
+  document.getElementById('cart-toggle-btn').style.display = 'flex';
+  const categories = ['All', ...new Set(DB.menuItems.map(i => i.category))];
+  updateCartUI();
+  const editBanner = editingOrderId ? `<div class="notice notice-amber" style="margin-bottom:16px;">✏️ Editing your order — make changes and tap Place Order to save.</div>` : '';
+  document.getElementById('page-content').innerHTML = `
+    ${editBanner}
+    ${isCutoffPassed()
+      ? `<div class="notice notice-amber">⏰ Cutoff passed — order now for ${formatDate(deliveryDate())}.</div>`
+      : `<div class="notice notice-green">✓ Order by 11:00 PM for delivery tomorrow.</div>`}
+    <div class="pill-filter" id="cat-filters">${categories.map(c => `<button class="pill ${c === activeCategory ? 'active' : ''}" onclick="filterCat('${c}')">${c}</button>`).join('')}</div>
+    <div class="catalog-grid" id="catalog-grid"></div>`;
+  renderCatalogItems();
+}
+
+function filterCat(cat) {
+  activeCategory = cat;
+  document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.textContent === cat));
+  renderCatalogItems();
+}
+
+function renderCatalogItems() {
+  const items = DB.menuItems.filter(i => activeCategory === 'All' || i.category === activeCategory);
+  document.getElementById('catalog-grid').innerHTML = items.map(item => `
+    <div class="catalog-item ${!item.available ? 'unavailable-overlay' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;">
+        <div class="catalog-item-cat">${item.category}</div>
+        ${(item.leadDays || 1) > 1 ? `<span class="badge" style="background:var(--amber-pale);color:var(--amber);font-size:9px;">${leadLabel(item.leadDays)}</span>` : ''}
+      </div>
+      <div class="catalog-item-name">${item.name}</div>
+      ${!item.available ? '<div style="color:var(--red);font-size:12px;">Unavailable</div>' : ''}
+      ${(item.leadDays || 1) > 1 ? `<div style="font-size:11px;color:var(--amber);font-family:'IBM Plex Mono',monospace;">Delivers ${formatDate(deliveryDate(item.leadDays))}</div>` : ''}
+      <div class="catalog-item-meta">
+        <div class="catalog-item-price">${fmt(item.price)} / ${item.unit}</div>
+        <div class="qty-control">
+          <button class="qty-btn" onclick="adjustQty('${item.id}',-1)">−</button>
+          <span class="qty-display" id="qty-${item.id}">${cart[item.id] || 0}</span>
+          <button class="qty-btn" onclick="adjustQty('${item.id}',1)">+</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function adjustQty(itemId, delta) {
+  const cur = cart[itemId] || 0, next = Math.max(0, cur + delta);
+  if (next === 0) delete cart[itemId]; else cart[itemId] = next;
+  const el = document.getElementById('qty-' + itemId);
+  if (el) el.textContent = next;
+  updateCartUI();
+}
+
+function groupCartByDelivery() {
+  const groups = {};
+  Object.entries(cart).forEach(([id, qty]) => {
+    const it = getItem(id); if (!it) return;
+    const dd = deliveryDate(it.leadDays || 1);
+    if (!groups[dd]) groups[dd] = [];
+    groups[dd].push({ id, qty, it });
+  });
+  return groups;
+}
+
+function updateCartUI() {
+  document.getElementById('cart-count').textContent = cartItemCount();
+  document.getElementById('cart-total-val').textContent = fmt(cartTotal());
+  document.getElementById('cart-delivery-date').textContent = '';
+  const body = document.getElementById('cart-body');
+  if (Object.keys(cart).length === 0) {
+    body.innerHTML = '<div class="empty-state" style="padding:28px 0;"><div class="empty-state-icon">🛒</div><div class="empty-state-text">No items added yet.</div></div>';
+    return;
+  }
+  const groups = groupCartByDelivery();
+  body.innerHTML = Object.keys(groups).sort().map(dd => {
+    const items = groups[dd];
+    const groupTotal = items.reduce((s, { it, qty }) => s + it.price * qty, 0);
+    return `<div style="margin-bottom:12px;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px;">📦 Delivery ${formatDate(dd)}</div>
+      ${items.map(({ id, qty, it }) => `<div class="cart-item"><div style="flex:1"><div class="cart-item-name">${it.name}</div><div class="cart-item-qty">${qty} × ${it.unit}</div></div><div class="cart-item-price">${fmt(it.price * qty)}</div></div>`).join('')}
+      <div style="display:flex;justify-content:flex-end;padding-top:4px;font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;">Subtotal: ${fmt(groupTotal)}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCart() { cartOpen = !cartOpen; document.getElementById('cart-panel').classList.toggle('open', cartOpen); }
+function clearCart() { cart = {}; editingOrderId = null; renderCatalogItems(); updateCartUI(); }
+
+async function submitOrder() {
+  if (Object.keys(cart).length === 0) { alert('Your cart is empty.'); return; }
+  showLoading();
+  try {
+    const groups = groupCartByDelivery();
+    const now = new Date().toISOString();
+    const newOrders = [];
+
+    if (editingOrderId) {
+      // Delete old order (cascade deletes order_items)
+      await sb.from('orders').delete().eq('id', editingOrderId);
+      editingOrderId = null;
+    }
+
+    for (const [dd, items] of Object.entries(groups).sort()) {
+      const { data: order, error } = await sb.from('orders').insert({
+        restaurant_id: currentUser.id,
+        delivery_date: dd,
+        status: 'pending',
+        placed_at: now
+      }).select().single();
+      if (error) throw error;
+
+      await sb.from('order_items').insert(items.map(({ id, qty }) => ({ order_id: order.id, item_id: id, qty })));
+      newOrders.push({ ...order, deliveryDate: order.delivery_date });
+    }
+
+    cart = {}; cartOpen = false;
+    document.getElementById('cart-panel').classList.remove('open');
+    await loadData();
+
+    const multi = newOrders.length > 1;
+    showModal(`<div style="text-align:center;padding:12px 0;">
+      <div style="font-size:48px;margin-bottom:12px;">✓</div>
+      <div class="modal-title" style="text-align:center;">${multi ? 'Orders Placed!' : 'Order Placed!'}</div>
+      <p style="color:var(--mid);margin-bottom:16px;">${multi ? 'Split into ' + newOrders.length + ' deliveries:' : 'Delivery confirmed for'}</p>
+      ${multi
+        ? `<div style="text-align:left;">${newOrders.map(o => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${formatDate(o.delivery_date)}</span><span class="text-mono">${fmt(orderTotal({ items: [] }))}</span></div>`).join('')}</div>`
+        : `<p style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--amber);font-weight:500;">${formatDate(newOrders[0].delivery_date)}</p>`}
+      <div class="modal-footer" style="justify-content:center;margin-top:20px;">
+        <button class="btn btn-primary" onclick="closeModal();navigate('history')">View History →</button>
+      </div>
+    </div>`);
+  } catch (e) {
+    console.error(e);
+    alert('Error placing order. Please try again.');
+  }
+  hideLoading();
+}
+
+// ── RESTAURANT — HISTORY ──────────────────────────────────────────────
+
+function canEditOrder(order) { return order.status === 'pending' && !isCutoffPassed(); }
+
+function editOrder(orderId) {
+  const order = DB.orders.find(o => o.id === orderId);
+  if (!order || !canEditOrder(order)) return;
+  editingOrderId = orderId;
+  cart = {};
+  order.items.forEach(li => { cart[li.itemId] = li.qty; });
+  navigate('catalog');
+  setTimeout(() => { cartOpen = false; toggleCart(); }, 150);
+}
+
+function renderHistory() {
+  const myOrders = DB.orders.filter(o => o.restaurantId === currentUser.id).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+  if (myOrders.length === 0) {
+    document.getElementById('page-content').innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">No orders yet</div><div class="empty-state-text">Place your first order to get started.</div></div>`;
+    return;
+  }
+  const cutoffNote = !isCutoffPassed() ? `<div class="notice notice-green" style="margin-bottom:16px;">✏️ You can edit pending orders until 11:00 PM today.</div>` : '';
+  const desktopTable = `<div class="card desktop-table"><div class="table-wrap"><table><thead><tr><th>Delivery</th><th>Items</th><th>Total</th><th>Status</th><th>Placed</th><th></th></tr></thead><tbody>${myOrders.map(o => {
+    const editable = canEditOrder(o);
+    return `<tr><td><strong>${formatDate(o.deliveryDate)}</strong></td><td class="text-muted">${o.items.length} item${o.items.length !== 1 ? 's' : ''}</td><td class="text-mono">${fmt(orderTotal(o))}</td><td><span class="badge badge-${o.status}">${o.status}</span></td><td class="text-muted text-small">${formatTime(o.placedAt)}</td><td style="white-space:nowrap;">${editable ? `<button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="editOrder('${o.id}')">✏️ Edit</button>` : ''}<button class="reorder-btn" onclick="reorder('${o.id}')">↺ Reorder</button></td></tr>`;
+  }).join('')}</tbody></table></div></div>`;
+  const mobileCards = `<div class="mobile-cards">${myOrders.map(o => {
+    const editable = canEditOrder(o);
+    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${formatDate(o.deliveryDate)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${o.items.length} item${o.items.length !== 1 ? 's' : ''} · ${fmt(orderTotal(o))}</div></div><span class="badge badge-${o.status}">${o.status}</span></div><div style="font-size:12px;color:var(--muted);">Placed ${formatTime(o.placedAt)}</div><div class="row-card-actions">${editable ? `<button class="btn btn-outline btn-sm" onclick="editOrder('${o.id}')">✏️ Edit Order</button>` : ''}<button class="reorder-btn" onclick="reorder('${o.id}')">↺ Reorder</button></div></div>`;
+  }).join('')}</div>`;
+  document.getElementById('page-content').innerHTML = cutoffNote + desktopTable + mobileCards;
+}
+
+// ── COMMISSARY — ORDERS ───────────────────────────────────────────────
+
+function renderOrders() {
+  const pending = DB.orders.filter(o => o.status === 'pending');
+  const fulfilled = DB.orders.filter(o => o.status === 'fulfilled');
+  const email = notificationEmail;
+  if (isAdmin()) {
+    document.getElementById('topbar-actions').innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button class="btn btn-outline btn-sm" onclick="previewEmail()">📧 Send Summary</button>
+        <button class="btn btn-ghost btn-sm" onclick="openSettingsModal()">⚙️${email ? '' : ' Set Email'}</button>
+      </div>`;
+  }
+  document.getElementById('page-content').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value">${pending.length}</div><div class="stat-sub">need fulfillment</div></div>
+      <div class="stat-card"><div class="stat-label">Fulfilled</div><div class="stat-value">${fulfilled.length}</div><div class="stat-sub">all time</div></div>
+      <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value" style="font-size:18px;padding-top:6px;">${fmt(pending.reduce((s, o) => s + orderTotal(o), 0))}</div><div class="stat-sub">pending revenue</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${activeOrderTab === 'pending' ? 'active' : ''}" data-tab="pending" onclick="switchOrderTab('pending')">Pending (${pending.length})</div>
+      <div class="tab ${activeOrderTab === 'fulfilled' ? 'active' : ''}" data-tab="fulfilled" onclick="switchOrderTab('fulfilled')">Fulfilled (${fulfilled.length})</div>
+    </div>
+    <div id="orders-list"></div>`;
+  renderOrdersList();
+}
+
+function switchOrderTab(tab) {
+  activeOrderTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  renderOrdersList();
+}
+
+function renderOrdersList() {
+  const orders = DB.orders.filter(o => o.status === activeOrderTab).sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+  if (orders.length === 0) {
+    document.getElementById('orders-list').innerHTML = `<div class="empty-state"><div class="empty-state-icon">✓</div><div class="empty-state-title">All clear</div><div class="empty-state-text">No ${activeOrderTab} orders.</div></div>`;
+    return;
+  }
+  const desktopTable = `<div class="card desktop-table"><div class="table-wrap"><table><thead><tr><th>Restaurant</th><th>Delivery</th><th>Items</th><th>Total</th><th>Placed</th><th></th></tr></thead><tbody>${orders.map(o => {
+    const r = getRestaurant(o.restaurantId);
+    return `<tr><td><strong>${r ? r.name : '?'}</strong></td><td class="text-mono text-small">${formatDate(o.deliveryDate)}</td><td><button class="btn btn-ghost btn-sm" onclick="viewOrderItems('${o.id}')">${o.items.length} item${o.items.length !== 1 ? 's' : ''} ↗</button></td><td class="text-mono">${fmt(orderTotal(o))}</td><td class="text-muted text-small">${formatTime(o.placedAt)}</td><td>${o.status === 'pending' ? `<button class="btn btn-green btn-sm" onclick="fulfillOrder('${o.id}')">Mark Fulfilled</button>` : `<span class="badge badge-fulfilled">Fulfilled</span>`}</td></tr>`;
+  }).join('')}</tbody></table></div></div>`;
+  const mobileCards = `<div class="mobile-cards">${orders.map(o => {
+    const r = getRestaurant(o.restaurantId);
+    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r ? r.name : '?'}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Delivery: ${formatDate(o.deliveryDate)}</div></div><div class="text-mono" style="font-weight:600;font-size:15px;">${fmt(orderTotal(o))}</div></div><div style="font-size:12px;color:var(--muted);">${o.items.length} items · Placed ${formatTime(o.placedAt)}</div><div class="row-card-actions"><button class="btn btn-ghost btn-sm" onclick="viewOrderItems('${o.id}')">View Items ↗</button>${o.status === 'pending' ? `<button class="btn btn-green btn-sm" onclick="fulfillOrder('${o.id}')">Mark Fulfilled</button>` : `<span class="badge badge-fulfilled">Fulfilled</span>`}</div></div>`;
+  }).join('')}</div>`;
+  document.getElementById('orders-list').innerHTML = desktopTable + mobileCards;
+}
+
+function viewOrderItems(orderId) {
+  const order = DB.orders.find(o => o.id === orderId); if (!order) return;
+  const rest = getRestaurant(order.restaurantId);
+  showModal(`<div class="modal-title">${rest ? rest.name : '?'}</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:16px;">Delivery: ${formatDate(order.deliveryDate)} · Placed: ${formatTime(order.placedAt)}</div>
+    ${order.items.map(li => { const it = getItem(li.itemId); return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);"><div><div style="font-weight:500;font-size:14px;">${it ? it.name : '?'}</div><div style="font-size:12px;color:var(--muted);">${li.qty} × ${it ? it.unit : '—'}</div></div><div class="text-mono">${it ? fmt(it.price * li.qty) : '—'}</div></div>`; }).join('')}
+    <div style="display:flex;justify-content:space-between;padding-top:14px;font-weight:600;"><span>Total</span><span class="text-mono" style="font-size:16px;">${fmt(orderTotal(order))}</span></div>
+    <div class="modal-footer">${order.status === 'pending' ? `<button class="btn btn-green" onclick="fulfillOrder('${order.id}');closeModal()">Mark Fulfilled</button>` : ''}<button class="btn btn-outline" onclick="closeModal()">Close</button></div>`);
+}
+
+async function fulfillOrder(orderId) {
+  showLoading();
+  try {
+    await sb.from('orders').update({ status: 'fulfilled' }).eq('id', orderId);
+    await loadData();
+    renderOrders();
+  } catch (e) { alert('Error updating order.'); }
+  hideLoading();
+}
+
+// ── COMMISSARY — MENU ─────────────────────────────────────────────────
+
+function renderMenu() {
+  document.getElementById('topbar-actions').innerHTML = isAdmin() ? `<button class="btn btn-amber btn-sm" onclick="openAddItemModal()">+ Add</button>` : '';
+  document.getElementById('page-content').innerHTML = `
+    <div class="card desktop-table"><div class="table-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Unit</th><th>Price</th><th>Lead Time</th><th>Available</th>${isAdmin() ? '<th></th>' : ''}</tr></thead><tbody id="menu-table-body"></tbody></table></div></div>
+    <div class="mobile-cards" id="menu-mobile-cards"></div>`;
+  renderMenuItems();
+}
+
+function renderMenuItems() {
+  const tb = document.getElementById('menu-table-body'), mc = document.getElementById('menu-mobile-cards');
+  if (tb) tb.innerHTML = DB.menuItems.map(item => `<tr>
+    <td><strong>${item.name}</strong></td>
+    <td><span class="badge" style="background:var(--amber-pale);color:var(--amber);">${item.category}</span></td>
+    <td class="text-muted">${item.unit}</td>
+    <td class="text-mono">${fmt(item.price)}</td>
+    <td><span class="badge" style="background:var(--cream);color:var(--mid);border:1px solid var(--border);">${leadLabel(item.leadDays || 1)}</span></td>
+    <td><label class="toggle-switch"><input type="checkbox" ${item.available ? 'checked' : ''} onchange="toggleItem('${item.id}',this.checked)"><span class="toggle-slider"></span></label></td>
+    ${isAdmin() ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openEditItemModal('${item.id}')">Edit</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteItem('${item.id}')">Del</button></td>` : ''}
+  </tr>`).join('');
+  if (mc) mc.innerHTML = DB.menuItems.map(item => `<div class="row-card">
+    <div class="row-card-header">
+      <div><div class="row-card-title">${item.name}</div>
+      <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span class="badge" style="background:var(--amber-pale);color:var(--amber);">${item.category}</span>
+        <span style="font-size:12px;color:var(--muted);">${item.unit} · ${fmt(item.price)}</span>
+        <span class="badge" style="background:var(--cream);color:var(--mid);border:1px solid var(--border);">${leadLabel(item.leadDays || 1)}</span>
+      </div></div>
+      <label class="toggle-switch"><input type="checkbox" ${item.available ? 'checked' : ''} onchange="toggleItem('${item.id}',this.checked)"><span class="toggle-slider"></span></label>
+    </div>
+    ${isAdmin() ? `<div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="openEditItemModal('${item.id}')">Edit</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteItem('${item.id}')">Delete</button></div>` : ''}
+  </div>`).join('');
+}
+
+async function toggleItem(itemId, val) {
+  try {
+    await sb.from('menu_items').update({ available: val }).eq('id', itemId);
+    const item = DB.menuItems.find(i => i.id === itemId);
+    if (item) item.available = val;
+  } catch (e) { alert('Error updating item.'); }
+}
+
+function itemForm(item = null) {
+  return `
+    <div class="form-group"><label class="form-label">Item Name</label><input id="if-name" class="form-input" value="${item ? item.name : ''}" placeholder="e.g. House Marinara Sauce"></div>
+    <div class="form-group"><label class="form-label">Category</label><input id="if-cat" class="form-input" value="${item ? item.category : ''}" placeholder="e.g. Sauces, Proteins"></div>
+    <div class="form-group"><label class="form-label">Unit</label><input id="if-unit" class="form-input" value="${item ? item.unit : ''}" placeholder="e.g. qt, lb, loaf"></div>
+    <div class="form-group"><label class="form-label">Price per Unit ($)</label><input id="if-price" class="form-input" type="number" step="0.01" min="0" value="${item ? item.price : ''}"></div>
+    <div class="form-group"><label class="form-label">Lead Time</label>
+      <select id="if-lead" class="form-input">
+        <option value="1" ${!item || item.leadDays === 1 ? 'selected' : ''}>Next Day (order by 11pm, arrives tomorrow)</option>
+        <option value="2" ${item && item.leadDays === 2 ? 'selected' : ''}>48 hrs (arrives 2 days out)</option>
+        <option value="3" ${item && item.leadDays === 3 ? 'selected' : ''}>72 hrs (arrives 3 days out)</option>
+      </select>
+    </div>`;
+}
+
+function openAddItemModal() { showModal(`<div class="modal-title">Add Menu Item</div>${itemForm()}<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveNewItem()">Add Item</button></div>`); }
+function openEditItemModal(itemId) { const item = DB.menuItems.find(i => i.id === itemId); if (!item) return; showModal(`<div class="modal-title">Edit Item</div>${itemForm(item)}<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveEditItem('${itemId}')">Save</button></div>`); }
+
+async function saveNewItem() {
+  const name = document.getElementById('if-name').value.trim();
+  const cat = document.getElementById('if-cat').value.trim();
+  const unit = document.getElementById('if-unit').value.trim();
+  const price = parseFloat(document.getElementById('if-price').value);
+  const leadDays = parseInt(document.getElementById('if-lead').value) || 1;
+  if (!name || !cat || !unit || isNaN(price)) { alert('Please fill in all fields.'); return; }
+  showLoading();
+  try {
+    await sb.from('menu_items').insert({ name, category: cat, unit, price, available: true, lead_days: leadDays });
+    await loadData(); closeModal(); renderMenu();
+  } catch (e) { alert('Error adding item.'); }
+  hideLoading();
+}
+
+async function saveEditItem(itemId) {
+  const name = document.getElementById('if-name').value.trim();
+  const cat = document.getElementById('if-cat').value.trim();
+  const unit = document.getElementById('if-unit').value.trim();
+  const price = parseFloat(document.getElementById('if-price').value);
+  const leadDays = parseInt(document.getElementById('if-lead').value) || 1;
+  showLoading();
+  try {
+    await sb.from('menu_items').update({ name, category: cat, unit, price, lead_days: leadDays }).eq('id', itemId);
+    await loadData(); closeModal(); renderMenu();
+  } catch (e) { alert('Error saving item.'); }
+  hideLoading();
+}
+
+async function deleteItem(itemId) {
+  if (!confirm('Delete this item?')) return;
+  showLoading();
+  try {
+    await sb.from('menu_items').delete().eq('id', itemId);
+    await loadData(); renderMenu();
+  } catch (e) { alert('Error deleting item.'); }
+  hideLoading();
+}
+
+// ── COMMISSARY — RESTAURANTS ──────────────────────────────────────────
+
+function renderRestaurants() {
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-amber btn-sm" onclick="openAddRestaurantModal()">+ Add</button>`;
+  document.getElementById('page-content').innerHTML = `
+    <div class="card desktop-table"><div class="table-wrap"><table><thead><tr><th>Restaurant</th><th>Email</th><th>Active</th><th>Orders</th><th></th></tr></thead><tbody id="restaurant-table-body"></tbody></table></div></div>
+    <div class="mobile-cards" id="restaurant-mobile-cards"></div>`;
+  renderRestaurantItems();
+}
+
+function renderRestaurantItems() {
+  const tb = document.getElementById('restaurant-table-body'), mc = document.getElementById('restaurant-mobile-cards');
+  const rows = DB.restaurants.map(r => {
+    const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
+    return `<tr><td><strong>${r.name}</strong></td><td class="text-muted text-mono text-small">${r.email}</td><td><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></td><td class="text-muted text-small">${orders.length} total, ${pending} pending</td><td><button class="btn btn-ghost btn-sm" onclick="resetPassword('${r.id}')">Reset PW</button></td></tr>`;
+  }).join('');
+  const cards = DB.restaurants.map(r => {
+    const orders = DB.orders.filter(o => o.restaurantId === r.id), pending = orders.filter(o => o.status === 'pending').length;
+    return `<div class="row-card"><div class="row-card-header"><div><div class="row-card-title">${r.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div></div><label class="toggle-switch"><input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRestaurant('${r.id}',this.checked)"><span class="toggle-slider"></span></label></div><div style="font-size:12px;color:var(--muted);">${orders.length} orders · ${pending} pending</div><div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="resetPassword('${r.id}')">Reset Password</button></div></div>`;
+  }).join('');
+  if (tb) tb.innerHTML = rows;
+  if (mc) mc.innerHTML = cards;
+}
+
+async function toggleRestaurant(id, val) {
+  try {
+    await sb.from('restaurants').update({ active: val }).eq('id', id);
+    const r = DB.restaurants.find(r => r.id === id); if (r) r.active = val;
+  } catch (e) { alert('Error updating restaurant.'); }
+}
+
+function openAddRestaurantModal() {
+  showModal(`<div class="modal-title">Add Restaurant</div>
+    <div class="form-group"><label class="form-label">Restaurant Name</label><input id="rf-name" class="form-input" placeholder="e.g. The Blue Plate"></div>
+    <div class="form-group"><label class="form-label">Email</label><input id="rf-email" class="form-input" type="email" placeholder="chef@restaurant.com"></div>
+    <div class="form-group"><label class="form-label">Password</label><input id="rf-pass" class="form-input" type="text" placeholder="Temporary password"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveNewRestaurant()">Add</button></div>`);
+}
+
+async function saveNewRestaurant() {
+  const name = document.getElementById('rf-name').value.trim();
+  const email = document.getElementById('rf-email').value.trim();
+  const pass = document.getElementById('rf-pass').value.trim();
+  if (!name || !email || !pass) { alert('Please fill in all fields.'); return; }
+  showLoading();
+  try {
+    const hashed = await hashPassword(pass);
+    await sb.from('restaurants').insert({ name, email, password_hash: hashed, active: true });
+    await loadData(); closeModal(); renderRestaurants();
+  } catch (e) { alert('Error adding restaurant. Email may already exist.'); }
+  hideLoading();
+}
+
+async function resetPassword(id) {
+  const r = DB.restaurants.find(r => r.id === id); if (!r) return;
+  const newPass = 'pass' + Math.floor(1000 + Math.random() * 9000);
+  showLoading();
+  try {
+    const hashed = await hashPassword(newPass);
+    await sb.from('restaurants').update({ password_hash: hashed }).eq('id', id);
+    showPasswordResetModal(r.name, newPass);
+  } catch (e) { alert('Error resetting password.'); }
+  hideLoading();
+}
+
+// ── COMMISSARY — USER MANAGEMENT ─────────────────────────────────────
+
+function renderUsers() {
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-amber btn-sm" onclick="openAddUserModal()">+ Add User</button>`;
+  document.getElementById('page-content').innerHTML = `
+    <div class="card desktop-table"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="users-table-body"></tbody></table></div></div>
+    <div class="mobile-cards" id="users-mobile-cards"></div>`;
+  renderUserItems();
+}
+
+function renderUserItems() {
+  const tb = document.getElementById('users-table-body'), mc = document.getElementById('users-mobile-cards');
+  const isSelf = u => u.id === currentUser.id;
+  if (tb) tb.innerHTML = DB.commissaryUsers.map(u => `<tr>
+    <td><strong>${u.name}</strong>${isSelf(u) ? ' <span class="badge" style="background:var(--amber-pale);color:var(--amber);">You</span>' : ''}</td>
+    <td class="text-muted text-mono text-small">${u.email}</td>
+    <td><span class="badge ${u.role === 'admin' ? 'badge-pending' : 'badge-fulfilled'}">${u.role}</span></td>
+    <td style="white-space:nowrap;">${!isSelf(u) ? `<button class="btn btn-ghost btn-sm" onclick="openEditUserModal('${u.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="resetUserPassword('${u.id}')">Reset PW</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteUser('${u.id}')">Del</button>` : '<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
+  </tr>`).join('');
+  if (mc) mc.innerHTML = DB.commissaryUsers.map(u => `<div class="row-card">
+    <div class="row-card-header">
+      <div><div class="row-card-title">${u.name}${isSelf(u) ? ' <span class="badge" style="background:var(--amber-pale);color:var(--amber);">You</span>' : ''}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">${u.email}</div></div>
+      <span class="badge ${u.role === 'admin' ? 'badge-pending' : 'badge-fulfilled'}">${u.role}</span>
+    </div>
+    ${!isSelf(u) ? `<div class="row-card-actions"><button class="btn btn-outline btn-sm" onclick="openEditUserModal('${u.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="resetUserPassword('${u.id}')">Reset PW</button><button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteUser('${u.id}')">Delete</button></div>` : ''}
+  </div>`).join('');
+}
+
+function userForm(user = null) {
+  return `
+    <div class="form-group"><label class="form-label">Name</label><input id="uf-name" class="form-input" value="${user ? user.name : ''}" placeholder="e.g. Jane Smith"></div>
+    <div class="form-group"><label class="form-label">Email</label><input id="uf-email" class="form-input" type="email" value="${user ? user.email : ''}" placeholder="jane@commissary.com"></div>
+    ${!user ? `<div class="form-group"><label class="form-label">Password</label><input id="uf-pass" class="form-input" type="text" placeholder="Temporary password"></div>` : ''}
+    <div class="form-group"><label class="form-label">Role</label>
+      <select id="uf-role" class="form-input">
+        <option value="staff" ${user && user.role === 'staff' ? 'selected' : ''}>Staff — fulfill orders & toggle availability</option>
+        <option value="admin" ${!user || user.role === 'admin' ? 'selected' : ''}>Admin — full access</option>
+      </select>
+    </div>`;
+}
+
+function openAddUserModal() { showModal(`<div class="modal-title">Add User</div>${userForm()}<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveNewUser()">Add User</button></div>`); }
+function openEditUserModal(userId) { const u = DB.commissaryUsers.find(u => u.id === userId); if (!u) return; showModal(`<div class="modal-title">Edit User</div>${userForm(u)}<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveEditUser('${userId}')">Save</button></div>`); }
+
+async function saveNewUser() {
+  const name = document.getElementById('uf-name').value.trim();
+  const email = document.getElementById('uf-email').value.trim();
+  const pass = document.getElementById('uf-pass').value.trim();
+  const role = document.getElementById('uf-role').value;
+  if (!name || !email || !pass) { alert('Please fill in all fields.'); return; }
+  showLoading();
+  try {
+    const hashed = await hashPassword(pass);
+    await sb.from('commissary_users').insert({ name, email, password_hash: hashed, role });
+    await loadData(); closeModal(); renderUsers();
+  } catch (e) { alert('Error adding user. Email may already exist.'); }
+  hideLoading();
+}
+
+async function saveEditUser(userId) {
+  const name = document.getElementById('uf-name').value.trim();
+  const email = document.getElementById('uf-email').value.trim();
+  const role = document.getElementById('uf-role').value;
+  showLoading();
+  try {
+    await sb.from('commissary_users').update({ name, email, role }).eq('id', userId);
+    await loadData(); closeModal(); renderUsers();
+  } catch (e) { alert('Error saving user.'); }
+  hideLoading();
+}
+
+async function resetUserPassword(userId) {
+  const u = DB.commissaryUsers.find(u => u.id === userId); if (!u) return;
+  const newPass = 'pass' + Math.floor(1000 + Math.random() * 9000);
+  showLoading();
+  try {
+    const hashed = await hashPassword(newPass);
+    await sb.from('commissary_users').update({ password_hash: hashed }).eq('id', userId);
+    showPasswordResetModal(u.name, newPass);
+  } catch (e) { alert('Error resetting password.'); }
+  hideLoading();
+}
+
+async function deleteUser(userId) {
+  if (userId === currentUser.id) { alert("You can't delete your own account."); return; }
+  if (!confirm('Delete this user?')) return;
+  showLoading();
+  try {
+    await sb.from('commissary_users').delete().eq('id', userId);
+    await loadData(); renderUsers();
+  } catch (e) { alert('Error deleting user.'); }
+  hideLoading();
+}
+
+// ── EMAIL NOTIFICATION ────────────────────────────────────────────────
+
+function buildOrderEmailBody() {
+  const tomorrow = deliveryDate(1);
+  const pendingOrders = DB.orders.filter(o => o.status === 'pending' && o.deliveryDate === tomorrow);
+  if (pendingOrders.length === 0) return { subject: 'ENC Orders – No orders for ' + formatDate(tomorrow), body: 'No orders placed for ' + formatDate(tomorrow) + '.' };
+  let body = 'ENC ORDERING SYSTEM — Orders for ' + formatDate(tomorrow) + '\n' + '='.repeat(50) + '\n\n';
+  pendingOrders.forEach(o => {
+    const rest = getRestaurant(o.restaurantId);
+    body += (rest ? rest.name : 'Unknown') + '\n' + '-'.repeat(30) + '\n';
+    o.items.forEach(li => { const it = getItem(li.itemId); body += `  ${it ? it.name : '?'} — ${li.qty} ${it ? it.unit : ''}\n`; });
+    body += `  Total: ${fmt(orderTotal(o))}\n\n`;
+  });
+  body += '='.repeat(50) + '\nGrand Total: ' + fmt(pendingOrders.reduce((s, o) => s + orderTotal(o), 0)) + '\n' + pendingOrders.length + ' restaurant' + (pendingOrders.length !== 1 ? 's' : '') + '\n';
+  return { subject: 'ENC Orders – ' + formatDate(tomorrow) + ' (' + pendingOrders.length + ' orders)', body };
+}
+
+function previewEmail() {
+  const { subject, body } = buildOrderEmailBody();
+  window.location.href = `mailto:${encodeURIComponent(notificationEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function openSettingsModal() {
+  showModal(`<div class="modal-title">Notification Settings</div>
+    <p style="color:var(--mid);font-size:13px;margin-bottom:20px;">At 11:00 PM each day, your email client will open with a summary of the next day's orders ready to send.</p>
+    <div class="form-group"><label class="form-label">Order Summary Email</label><input id="notify-email" class="form-input" type="email" placeholder="orders@yourcommissary.com" value="${notificationEmail}"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-amber" onclick="saveNotifyEmail()">Save</button></div>`);
+}
+
+function saveNotifyEmail() {
+  notificationEmail = document.getElementById('notify-email').value.trim();
+  localStorage.setItem('enc_notify_email', notificationEmail);
+  closeModal();
+  if (currentPage === 'orders') renderOrders();
+}
+
+setInterval(() => {
+  const now = new Date();
+  if (now.getHours() === 23 && now.getMinutes() === 0) {
+    const todayKey = now.toISOString().split('T')[0];
+    if (!localStorage.getItem('enc_email_sent_' + todayKey) && notificationEmail) {
+      localStorage.setItem('enc_email_sent_' + todayKey, '1');
+      previewEmail();
+    }
+  }
+}, 30000);
+</script>
+</body>
+</html>
